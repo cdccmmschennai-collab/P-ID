@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Sign in - P&amp;ID Tag Extractor</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--fg:#1c2330;--mute:#6b7585;--line:#dde1e8;--acc:#2455d6}
+@media(prefers-color-scheme:dark){:root{--bg:#12151b;--card:#1b2029;--fg:#e8ebf0;--mute:#98a2b3;--line:#2d3441;--acc:#6b95ff}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,sans-serif;
+ min-height:100vh;display:flex;align-items:center;justify-content:center;padding:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:28px;width:100%;max-width:360px}
+h1{font-size:20px;margin:0 0 4px}.mute{color:var(--mute);margin:0 0 20px;font-size:14px}
+label{display:block;font-size:13px;font-weight:600;margin:14px 0 6px}
+input{width:100%;background:var(--card);color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:9px 10px;font:inherit}
+input:focus{outline:2px solid var(--acc);outline-offset:-1px;border-color:transparent}
+button{width:100%;margin-top:22px;background:var(--acc);color:#fff;border:0;border-radius:6px;padding:10px 16px;font:inherit;font-weight:600;cursor:pointer}
+.err{color:#d33;background:color-mix(in srgb,#d33 10%,transparent);border-radius:6px;padding:8px 10px;font-size:14px;margin-bottom:6px}
+</style></head><body>
+<form class="card" method="post" action="/login">
+  <h1>P&amp;ID Tag Extractor</h1>
+  <p class="mute">Sign in to continue</p>
+  {% if error %}<div class="err">{{ error }}</div>{% endif %}
+  <label for="username">Username</label>
+  <input id="username" name="username" autocomplete="username" required autofocus value="{{ request.form.username or '' }}">
+  <label for="password">Password</label>
+  <input id="password" name="password" type="password" autocomplete="current-password" required>
+  <button type="submit">Sign in</button>
+</form>
+</body></html>

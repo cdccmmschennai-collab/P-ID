@@ -1,0 +1,8 @@
+flask
+pdfplumber
+shapely
+opencv-python-headless
+numpy
+# scanned / outlined-text pages: poppler-utils (pdftoppm) + OCR engine
+rapidocr-onnxruntime
+# alternatives: easyocr / paddleocr paddlepaddle / pytesseract

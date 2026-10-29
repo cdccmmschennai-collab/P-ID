@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>P&amp;ID Tag Extractor</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--fg:#1c2330;--mute:#6b7585;--line:#dde1e8;--acc:#2455d6;--ok:#13795b;--warn:#b45309}
+@media(prefers-color-scheme:dark){:root{--bg:#12151b;--card:#1b2029;--fg:#e8ebf0;--mute:#98a2b3;--line:#2d3441;--acc:#6b95ff;--ok:#4cc9a0;--warn:#f0a04b}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,sans-serif}
+main{max-width:1100px;margin:0 auto;padding:24px 16px}
+h1{font-size:22px;margin:0 0 16px}.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:18px;margin-bottom:16px}
+#drop{border:2px dashed var(--line);border-radius:10px;padding:36px;text-align:center;color:var(--mute);cursor:pointer}
+#drop.over{border-color:var(--acc);color:var(--acc)}
+button{background:var(--acc);color:#fff;border:0;border-radius:6px;padding:9px 16px;font:inherit;cursor:pointer}
+button.sec{background:transparent;color:var(--fg);border:1px solid var(--line)}button:disabled{opacity:.5;cursor:default}
+table{border-collapse:collapse;width:100%;font-size:13px}th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)}
+th{position:sticky;top:0;background:var(--card)}.scroll{max-height:460px;overflow:auto}
+.tag{display:inline-block;padding:1px 8px;border-radius:99px;font-size:12px;font-weight:600}
+.vector{background:color-mix(in srgb,var(--ok) 18%,transparent);color:var(--ok)}
+.scanned{background:color-mix(in srgb,var(--warn) 18%,transparent);color:var(--warn)}
+.row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.mute{color:var(--mute)}.err{color:#d33}
+select,input[type=number]{background:var(--card);color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:5px 8px;font:inherit}
+.hide{display:none}
+#prog{margin-top:14px}#bar{height:10px;background:var(--line);border-radius:99px;overflow:hidden}
+#fill{height:100%;width:0;background:var(--acc);border-radius:99px;transition:width .4s ease}
+#progTxt{display:flex;justify-content:space-between;font-size:13px;margin-top:6px}
+</style></head><body><main>
+<div class="row" style="justify-content:space-between;margin-bottom:16px"><h1 style="margin:0">P&amp;ID Tag Extractor</h1>
+<form method="post" action="/logout" class="row"><span class="mute">Signed in as {{ user }}</span><button class="sec">Log out</button></form></div>
+
+<div class="card"><div id="drop">Drop a PDF / image here or click to browse
+<input id="file" type="file" accept=".pdf,.png,.jpg,.jpeg,.tif,.tiff,.bmp" class="hide"></div>
+<div id="msg" class="mute" style="margin-top:10px"></div></div>
+
+<div id="detectCard" class="card hide">
+  <div class="row" style="justify-content:space-between"><strong id="fname"></strong><span class="mute" id="summary"></span></div>
+  <div class="scroll" style="max-height:300px;margin:10px 0"><table><thead><tr><th>Page</th><th>Detected</th><th>Why</th><th>Use</th></tr></thead><tbody id="pages"></tbody></table></div>
+  <div class="row">
+    <label>OCR engine <select id="engine"><option>rapidocr</option><option>easyocr</option><option>paddle</option><option>tesseract</option></select></label>
+    <label>DPI <input id="dpi" type="number" value="300" min="100" max="400" step="50" style="width:80px"></label>
+    <label>Profile <select id="profile"><option>auto</option><option>ngl1</option><option>mgdv</option></select></label>
+    <button id="run">Extract tags</button>
+  </div>
+  <div id="prog" class="hide"><div id="bar"><div id="fill"></div></div>
+    <div id="progTxt" class="mute"><span id="progLbl">Starting ...</span><span id="progPct">0%</span></div></div>
+</div>
+
+<div id="resCard" class="card hide">
+  <div class="row" style="justify-content:space-between"><strong id="resTitle"></strong><span class="row"><span class="mute" id="saved"></span><a id="dlj"><button class="sec">Download JSON</button></a><a id="dl"><button class="sec">Download CSV</button></a></span></div>
+  <div class="scroll" style="margin-top:10px"><table><thead id="rh"></thead><tbody id="rb"></tbody></table></div>
+</div>
+</main>
+<script>
+const $=id=>document.getElementById(id);let job=null;
+const drop=$('drop'),file=$('file');
+drop.onclick=()=>file.click();
+drop.ondragover=e=>{e.preventDefault();drop.classList.add('over')};
+drop.ondragleave=()=>drop.classList.remove('over');
+drop.ondrop=e=>{e.preventDefault();drop.classList.remove('over');if(e.dataTransfer.files[0])upload(e.dataTransfer.files[0])};
+file.onchange=()=>file.files[0]&&upload(file.files[0]);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+async function upload(f){
+  $('msg').textContent='Analysing '+f.name+' ...';$('msg').className='mute';
+  $('detectCard').classList.add('hide');$('resCard').classList.add('hide');$('prog').classList.add('hide');
+  const fd=new FormData();fd.append('file',f);
+  const r=await fetch('/api/analyze',{method:'POST',body:fd});const j=await r.json();
+  if(!r.ok){$('msg').textContent=j.error;$('msg').className='err';return}
+  job=j.job;$('msg').textContent='';$('fname').textContent=j.name;$('run').disabled=false;
+  const v=j.pages.filter(p=>p.verdict==='vector').length;
+  $('summary').textContent=`${j.pages.length} page(s): ${v} text-based, ${j.pages.length-v} scanned/OCR`;
+  $('pages').innerHTML=j.pages.map(p=>`<tr><td>${p.page+1}</td>
+   <td><span class="tag ${p.verdict}">${p.verdict==='vector'?'Text-based':'Scanned (OCR)'}</span></td>
+   <td class="mute">${esc(p.reason)}</td>
+   <td><select data-p="${p.page}"><option value="vector"${p.verdict==='vector'?' selected':''}>vector</option>
+   <option value="scanned"${p.verdict==='scanned'?' selected':''}>scanned</option></select></td></tr>`).join('');
+  $('detectCard').classList.remove('hide');
+}
+
+$('run').onclick=async()=>{
+  const overrides={};document.querySelectorAll('#pages select').forEach(s=>overrides[s.dataset.p]=s.value);
+  $('run').disabled=true;$('resCard').classList.add('hide');$('msg').textContent='';
+  setProg(0,'Starting ...');$('prog').classList.remove('hide');
+  const pr=await fetch('/api/process/'+job,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(
+    {overrides,engine:$('engine').value,dpi:$('dpi').value,profile:$('profile').value})});
+  if(!pr.ok){$('prog').classList.add('hide');$('run').disabled=false;$('msg').textContent=(await pr.json()).error;$('msg').className='err';return}
+  const t=setInterval(async()=>{
+    const s=await (await fetch('/api/status/'+job)).json();
+    if(s.status==='running'){setProg(s.pct,'Processing '+s.progress+' ...');return}
+    clearInterval(t);$('run').disabled=false;
+    if(s.status==='error'){$('prog').classList.add('hide');$('msg').textContent=s.error;$('msg').className='err';return}
+    setProg(100,'Done');show(s);
+  },700);
+};
+function setProg(pct,label){
+  pct=Math.max(0,Math.min(100,pct||0));
+  $('fill').style.width=pct+'%';$('progPct').textContent=Math.floor(pct)+'%';$('progLbl').textContent=label;
+}
+function show(s){
+  $('resTitle').textContent=s.rows.length+' unique tag rows';
+  $('rh').innerHTML='<tr>'+s.fields.map(f=>`<th>${esc(f)}</th>`).join('')+'</tr>';
+  $('rb').innerHTML=s.rows.map(r=>'<tr>'+s.fields.map(f=>`<td>${esc(r[f]??'')}</td>`).join('')+'</tr>').join('');
+  $('dl').href='/api/csv/'+job;$('dlj').href='/api/json/'+job;
+  $('saved').textContent='Saved to results/'+s.json+' (original deleted)';
+  $('run').disabled=true;$('resCard').classList.remove('hide');
+}
+</script></body></html>
